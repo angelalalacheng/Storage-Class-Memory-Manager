@@ -37,6 +37,15 @@ insert(struct avl *avl, const char *s)
     return 0;
 }
 
+static int delete(struct avl *avl, const char *s)
+{
+    if (avl_delete(avl, s))
+    {
+        printf("error: failed to delete '%s'", s);
+    }
+    return 0;
+}
+
 static int
 load(struct avl *avl, const char *s)
 {
@@ -69,7 +78,7 @@ list_word(void *arg, const char *word, uint64_t count)
 {
     UNUSED(arg);
 
-    printf("'%s' x %lu\n", word, (unsigned long)count);
+    printf("'%s' x %lu: %p\n", word, (unsigned long)count, word);
 }
 
 static int
@@ -113,7 +122,7 @@ help(struct avl *avl, const char *s)
            "  load pathname : load words from file @ 'pathname'\n"
            "  insert word   : insert 'word'\n"
            "  exists word   : check if 'word' exists\n"
-           "\n");
+           "  delete word   : delete 'word'\n\n");
     return 0;
 }
 
@@ -142,7 +151,8 @@ shell_fnc(void *arg, const char *s)
         {0, "list", list},
         {1, "load", load},
         {1, "insert", insert},
-        {1, "exists", exists}};
+        {1, "exists", exists},
+        {1, "delete", delete}};
     struct avl *avl;
     uint64_t i;
 

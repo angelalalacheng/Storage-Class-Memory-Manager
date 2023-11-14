@@ -36,7 +36,7 @@ struct scm
     int fd;
     size_t size;
     size_t utilized;
-    char *base; /* root address (usig char* is more convenient) */
+    void *base; /* root address */
 };
 
 /**
@@ -55,11 +55,8 @@ struct scm *scm_open(const char *pathname, int truncate)
     struct stat info;
 
     int fd;
-    char *base = NULL;
-    size_t used = 0;
 
-    fd = open(pathname, O_RDWR, S_IRUSR | S_IWUSR);
-    if (fd < 0)
+    if ((fd = open(pathname, O_RDWR, S_IRUSR | S_IWUSR)) < 0)
     {
         TRACE("open file failed");
         return NULL;
@@ -82,8 +79,8 @@ struct scm *scm_open(const char *pathname, int truncate)
         return NULL;
     }
 
-    base = mmap((void *)VIRT_ADDR, info.st_size, PROT_READ | PROT_WRITE, MAP_FIXED | MAP_SHARED, fd, 0);
-    if (base == MAP_FAILED)
+    scm->base = mmap((void *)VIRT_ADDR, info.st_size, PROT_READ | PROT_WRITE, MAP_FIXED | MAP_SHARED, fd, 0);
+    if (scm->base == MAP_FAILED)
     {
         TRACE("mmap() failed");
         close(fd);
@@ -93,28 +90,22 @@ struct scm *scm_open(const char *pathname, int truncate)
 
     if (!truncate)
     {
-        /* find the previous utilized address */
-        off_t end;
-
-        if ((end = lseek(fd, -sizeof(size_t), SEEK_END)) == -1)
-        {
-            close(fd);
-            free(scm);
-            return NULL;
-        }
-
-        if (read(fd, &used, sizeof(size_t)) == -1)
-        {
-            close(fd);
-            free(scm);
-            return NULL;
-        }
+        /* if not truncate, read the utilized in the header, use size_t space */
+        printf("not truncate\n");
+        scm->utilized = *(size_t *)scm->base;
+        printf("utilized: %lu\n", scm->utilized);
+    }
+    else
+    {
+        /* if truncate, store the utilized in the header, use size_t space */
+        printf("truncate\n");
+        scm->utilized = 0;
+        *(size_t *)scm->base = scm->utilized;
+        printf("utilized: %lu\n", scm->utilized);
     }
 
     scm->fd = fd;
     scm->size = info.st_size;
-    scm->utilized = used;
-    scm->base = base;
 
     return scm;
 }
@@ -132,22 +123,18 @@ void scm_close(struct scm *scm)
 {
     if (scm)
     {
-        /* record the memory we have utilized */
-        if (lseek(scm->fd, -sizeof(size_t), SEEK_END) != (off_t)-1)
+        if (msync(scm->base, scm->size, MS_SYNC) == -1)
         {
-            if (write(scm->fd, &(scm->utilized), sizeof(scm->utilized)) == -1)
-            {
-                TRACE("close write() failed");
-                close(scm->fd);
-                return;
-            }
+            TRACE("msync error");
         }
-        /* use msync() to sync the content to disk */
-        msync(scm->base, scm->size, MS_SYNC);
 
-        /* unmap the memory */
-        munmap(scm->base, scm->size);
+        if (munmap(scm->base, scm->size) == -1)
+        {
+            TRACE("munmap error");
+        }
+
         close(scm->fd);
+
         memset(scm, 0, sizeof(struct scm));
         free(scm);
     }
@@ -168,6 +155,7 @@ void scm_close(struct scm *scm)
 void *scm_malloc(struct scm *scm, size_t n)
 {
     void *pos = NULL;
+    size_t *blockSize;
 
     if (!scm || n == 0)
     {
@@ -175,14 +163,25 @@ void *scm_malloc(struct scm *scm, size_t n)
         return NULL;
     }
 
-    if (scm->utilized + n >= scm->size)
+    if (scm->utilized + n + sizeof(size_t) > scm->size)
     {
         TRACE("out of scm memory");
         return NULL;
     }
-    /* linear allocator */
-    pos = scm->base + scm->utilized;
-    scm->utilized += n;
+
+    /* calculate the position of store the size */
+    blockSize = (size_t *)((char *)scm->base + sizeof(size_t) + scm->utilized);
+    *blockSize = n;
+
+    printf("malloc blockSize: %lu\n", *blockSize);
+
+    /* move the pointer to the actual start of the allocated block */
+    pos = (void *)(blockSize + 1);
+    printf("malloc pos: %p\n", pos);
+    scm->utilized += (n + sizeof(size_t));
+
+    /* update the memory header to store the new utilized value */
+    *(size_t *)scm->base = scm->utilized;
 
     return pos;
 }
@@ -217,13 +216,15 @@ char *scm_strdup(struct scm *scm, const char *s)
     }
 
     pos = scm_malloc(scm, len);
+    printf("strdup pos: %p\n", pos);
     if (!pos)
     {
         TRACE("scm_malloc() failed");
         return NULL;
     }
 
-    strncpy(pos, s, len);
+    printf("strdup copy string: %s\n", pos);
+    memcpy(pos, s, len);
 
     return pos;
 }
@@ -235,12 +236,25 @@ char *scm_strdup(struct scm *scm, const char *s)
  * p  : a pointer to the start of a previously allocated memory
  */
 
-/*
 void scm_free(struct scm *scm, void *p)
 {
-    // extra point
+    size_t size;
+    if (!scm || !p)
+    {
+        TRACE("invalid input");
+        return;
+    }
+
+    size = *(size_t *)((char *)p - sizeof(size_t)); /* get the size of the block by minus the metadata*/
+
+    /* update utilized */
+    /*scm->utilized = scm->utilized - size - sizeof(size_t);*/
+
+    /* update the header information */
+    /**(size_t *)scm->base = scm->utilized;*/
+
+    return;
 }
-*/
 
 /**
  * Returns the number of SCM bytes utilized thus far.
@@ -294,7 +308,7 @@ void *scm_mbase(struct scm *scm)
 {
     if (scm)
     {
-        return scm->base;
+        return (char *)scm->base + sizeof(size_t) + sizeof(size_t);
     }
 
     return NULL;

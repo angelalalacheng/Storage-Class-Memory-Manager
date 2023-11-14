@@ -22,6 +22,8 @@ void avl_close(struct avl *avl);
 
 int avl_insert(struct avl *avl, const char *item);
 
+int avl_delete(struct avl *avl, const char *item);
+
 uint64_t avl_exists(const struct avl *avl, const char *item);
 
 void avl_traverse(const struct avl *avl, avl_fnc_t fnc, void *arg);
@@ -35,3 +37,5 @@ size_t avl_scm_utilized(const struct avl *avl);
 size_t avl_scm_capacity(const struct avl *avl);
 
 #endif /* _AVL_H_ */
+
+/* ref: https://www.educative.io/answers/how-to-delete-a-node-from-an-avl-tree */
