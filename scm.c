@@ -91,17 +91,13 @@ struct scm *scm_open(const char *pathname, int truncate)
     if (!truncate)
     {
         /* if not truncate, read the utilized in the header, use size_t space */
-        printf("not truncate\n");
         scm->utilized = *(size_t *)scm->base;
-        printf("utilized: %lu\n", scm->utilized);
     }
     else
     {
         /* if truncate, store the utilized in the header, use size_t space */
-        printf("truncate\n");
         scm->utilized = 0;
         *(size_t *)scm->base = scm->utilized;
-        printf("utilized: %lu\n", scm->utilized);
     }
 
     scm->fd = fd;
@@ -173,11 +169,9 @@ void *scm_malloc(struct scm *scm, size_t n)
     blockSize = (size_t *)((char *)scm->base + sizeof(size_t) + scm->utilized);
     *blockSize = n;
 
-    printf("malloc blockSize: %lu\n", *blockSize);
-
     /* move the pointer to the actual start of the allocated block */
     pos = (void *)(blockSize + 1);
-    printf("malloc pos: %p\n", pos);
+    // printf("malloc pos: %p\n", pos);
     scm->utilized += (n + sizeof(size_t));
 
     /* update the memory header to store the new utilized value */

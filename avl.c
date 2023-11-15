@@ -104,7 +104,6 @@ update(struct avl *avl, struct node *root, const char *item)
             TRACE(0);
             return NULL;
         }
-        printf(" %s: new root constructed in update\n", root->item);
         ++root->count;
         ++avl->state->items;
         ++avl->state->unique;
@@ -112,18 +111,15 @@ update(struct avl *avl, struct node *root, const char *item)
     }
     if (!(d = strcmp(item, root->item))) /* if item already exists */
     {
-        printf(" %s already exists in update\n", item);
         ++root->count;
         ++avl->state->items;
     }
     else if (0 > d) /* if item is lower(in ASCII) than root */
     {
-        printf(" %s is lower than root %s in update\n", item, root->item);
         root->left = update(avl, root->left, item);
     }
     else if (0 < d) /* if item is higher(in ASCII) than root */
     {
-        printf(" %s is higher than root %s in update\n", item, root->item);
         root->right = update(avl, root->right, item);
     }
     root->depth = depth(root->left, root->right);
@@ -223,7 +219,6 @@ int avl_insert(struct avl *avl, const char *item)
         return -1;
     }
     avl->state->root = root;
-    printf("root of avl: %s\n", avl->state->root->item);
     return 0;
 }
 
@@ -399,10 +394,6 @@ int avl_delete(struct avl *avl, const char *item)
 
     avl->state->items -= exists;
     avl->state->unique -= 1;
-
-    printf("new avl state items: %lu\n", avl->state->items);
-    printf("new avl state unique: %lu\n", avl->state->unique);
-    printf("new avl root item: %s\n", avl->state->root->item);
 
     return 0;
 }
